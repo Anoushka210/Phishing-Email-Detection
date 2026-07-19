@@ -6,3 +6,11 @@ __pycache__/
 .ipynb_checkpoints/
 venv/
 .venv/
+.DS_Store
+
+data/.DS_Store
+crash_log*.txt
+test_uploads/
+
+data/processed/*.csv
+models/metadata_random_forest.joblib

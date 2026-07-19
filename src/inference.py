@@ -76,3 +76,31 @@ def predict_email(raw_text: str, vectorizer, models: dict) -> dict:
         "feature_matrix": X,
         "model_results": results,
     }
+
+def predict_batch(text_series: pd.Series, vectorizer, models: dict) -> pd.DataFrame:
+    """
+    Vectorized batch version of predict_email - cleans, featurizes, and
+    classifies an entire column of emails at once instead of looping
+    row-by-row. Dramatically faster for batch uploads (2000 rows: ~2.3min
+    looped vs. a few seconds vectorized).
+    """
+    clean_texts = text_series.fillna("").apply(clean_single_email)
+
+    structural_records = [build_single_email_features(t) for t in clean_texts]
+    structural_df = pd.DataFrame(structural_records)[STRUCTURAL_FEATURE_COLS]
+
+    tfidf_texts = clean_texts.apply(prepare_tfidf_text)
+    tfidf_matrix = vectorizer.transform(tfidf_texts)
+    structural_matrix = csr_matrix(structural_df.values)
+    X = hstack([tfidf_matrix, structural_matrix]).tocsr()
+
+    results_df = pd.DataFrame(index=text_series.index)
+
+    for name, model in models.items():
+        X_input = X.toarray().astype("float32") if name == "hist_gradient_boosting" else X
+        preds = model.predict(X_input)
+        probas = model.predict_proba(X_input)[:, 1]
+        results_df[f"{name}_prediction"] = preds
+        results_df[f"{name}_phishing_probability"] = probas.round(4)
+
+    return results_df

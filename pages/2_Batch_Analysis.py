@@ -6,7 +6,7 @@ column names, or lets the user pick).
 import pandas as pd
 import streamlit as st
 
-from src.inference import load_text_models, predict_email
+from src.inference import load_text_models, predict_batch
 
 st.set_page_config(page_title="Batch Analysis - PhishGuard", layout="wide")
 st.title("Batch Email Analysis")
@@ -33,23 +33,15 @@ if uploaded_file is not None:
     run_btn = st.button("Run Batch Classification", type="primary")
 
     if run_btn:
-        progress = st.progress(0, text="Classifying emails...")
-        predictions = []
-        probabilities = []
+        with st.spinner(f"Classifying {len(df)} emails..."):
+            results_df = predict_batch(df[text_col], vectorizer, models)
 
-        for i, text in enumerate(df[text_col].fillna("")):
-            result = predict_email(str(text), vectorizer, models)
-            best = result["model_results"]["hist_gradient_boosting"]
-            predictions.append("Phishing" if best["prediction"] == 1 else "Legitimate")
-            probabilities.append(round(best["phishing_probability"], 4))
-            progress.progress((i + 1) / len(df), text=f"Classifying emails... {i+1}/{len(df)}")
+        df["prediction"] = results_df["hist_gradient_boosting_prediction"].map(
+            {1: "Phishing", 0: "Legitimate"}
+        )
+        df["phishing_probability"] = results_df["hist_gradient_boosting_phishing_probability"]
 
-        progress.empty()
-
-        df["prediction"] = predictions
-        df["phishing_probability"] = probabilities
-
-        st.success(f"Done. {sum(p == 'Phishing' for p in predictions)} of {len(df)} flagged as phishing.")
+        st.success(f"Done. {(df['prediction'] == 'Phishing').sum()} of {len(df)} flagged as phishing.")
         st.dataframe(df)
 
         csv_out = df.to_csv(index=False).encode("utf-8")
